@@ -97,7 +97,7 @@ export function CategoryTree({
   onSelectCategory,
 }: CategoryTreeProps) {
   return (
-    <div className="space-y-1">
+    <div className="min-w-0 space-y-1">
       {rootCategoryIds.map((categoryId) => (
         <CategoryTreeNode
           key={categoryId}

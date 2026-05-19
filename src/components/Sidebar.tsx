@@ -37,8 +37,8 @@ export function Sidebar({
   const [editingCase, setEditingCase] = useState(false);
 
   return (
-    <div className="flex h-full flex-col">
-      <div className="flex items-center justify-between border-b border-border/70 px-3 py-3 lg:px-4">
+    <div className="flex h-full min-h-0 flex-col">
+      <div className="flex shrink-0 items-center justify-between border-b border-border/70 px-3 py-3 lg:px-4">
         <div>
           <p className="font-display text-sm tracking-wide text-slate-200">Categories</p>
           <p className="text-xs text-slate-400">Recursive ARF tree</p>
@@ -54,7 +54,7 @@ export function Sidebar({
         </Button>
       </div>
 
-      <div className="flex-1 overflow-y-auto px-2 py-3 lg:px-3">
+      <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain pl-2 pr-1 py-3 lg:pl-3 lg:pr-2">
         <CategoryTree
           rootCategoryIds={rootCategoryIds}
           categoriesById={categoriesById}
@@ -66,7 +66,7 @@ export function Sidebar({
         />
       </div>
 
-      <div className="border-t border-border/70 p-3">
+      <div className="shrink-0 border-t border-border/70 p-3">
         <Card className="space-y-3 bg-panelAlt/80 p-3">
           <div className="flex items-start justify-between gap-2">
             <div>

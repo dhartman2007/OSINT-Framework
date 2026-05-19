@@ -430,8 +430,8 @@ export default function App() {
   );
 
   const mainPanel = (
-    <div className="flex h-full flex-col">
-      <div className="space-y-4 border-b border-border/70 bg-panel/70 px-4 py-4 lg:px-5">
+    <div className="flex h-full min-h-0 flex-col">
+      <div className="shrink-0 space-y-4 border-b border-border/70 bg-panel/70 px-4 py-4 lg:px-5">
         <div>
           <p className="font-display text-xs uppercase tracking-[0.24em] text-accentBlue">
             OSINT Framework Local Edition
@@ -456,7 +456,7 @@ export default function App() {
         </div>
       </div>
 
-      <div className="flex-1 overflow-y-auto px-4 py-4 lg:px-5">
+      <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 py-4 lg:px-5">
         {loading ? (
           <Card className="flex min-h-[220px] items-center justify-center gap-2 bg-panelAlt/60">
             <Loader2 className="h-5 w-5 animate-spin text-accentBlue" />
