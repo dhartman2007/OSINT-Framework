@@ -20914,7 +20914,8 @@
               "type": "url",
               "url": "https://www.cyber.gc.ca/"
             }
-          ]
+          ],
+          "type": "folder"
         },
         {
           "name": "Attack Surface / Security Testing",
@@ -20996,7 +20997,8 @@
               "type": "url",
               "url": "https://packetstormsecurity.com/"
             }
-          ]
+          ],
+          "type": "folder"
         },
         {
           "name": "IOC Tools",
@@ -21823,7 +21825,8 @@
               "invitationOnly": false,
               "deprecated": false
             }
-          ]
+          ],
+          "type": "folder"
         },
         {
           "name": "TTPs",
@@ -21873,9 +21876,11 @@
               "type": "url",
               "url": "https://attack.mitre.org/"
             }
-          ]
+          ],
+          "type": "folder"
         }
-      ]
+      ],
+      "type": "folder"
     },
     {
       "name": "OpSec",
