@@ -106,9 +106,11 @@ function textOf(resource) {
 function scenarioText(options = {}) {
   return [
     options.targetType,
+    options.scenarioType,
     options.targetName,
     options.location,
     options.scenario,
+    options.authorizedPurpose,
     ...(Array.isArray(options.priorities) ? options.priorities : []),
   ]
     .join(" ")
@@ -336,6 +338,125 @@ function compactTool(resource) {
   };
 }
 
+function isBackgroundCheckScenario(context = {}) {
+  const targetType = String(context.targetType ?? "").toLowerCase();
+  const scenarioType = String(context.scenarioType ?? "").toLowerCase();
+  const s = scenarioText(context);
+
+  return (
+    scenarioType === "background_check" ||
+    (targetType === "person" && s.includes("background check"))
+  );
+}
+
+function shouldSuppressBucketForScenario(bucket, context = {}) {
+  if (!isBackgroundCheckScenario(context)) return false;
+
+  const s = scenarioText(context);
+
+  const explicitRequests = {
+    transportation: [
+      "transportation",
+      "vehicle",
+      "vessel",
+      "ship",
+      "maritime",
+      "aircraft",
+      "rail",
+      "ais",
+    ],
+    weather_public_safety_local: [
+      "weather",
+      "storm",
+      "hurricane",
+      "public safety",
+      "emergency",
+      "alert",
+      "nws",
+      "noaa",
+    ],
+    military: [
+      "military",
+      "defense",
+      "base",
+      "installation",
+      "imagery",
+      "satellite",
+    ],
+    domain_dns: [
+      "domain",
+      "dns",
+      "website",
+      "subdomain",
+      "whois",
+      "infrastructure",
+    ],
+    dark_web: ["dark web", "onion", "tor hidden", "darknet"],
+    cyber_threat_intelligence: [
+      "cti",
+      "cyber threat",
+      "malware",
+      "breach",
+      "infostealer",
+    ],
+  };
+
+  const suppressByDefault = new Set([
+    "transportation",
+    "weather_public_safety_local",
+    "military",
+    "domain_dns",
+  ]);
+
+  if (!suppressByDefault.has(bucket)) return false;
+
+  const requestedTerms = explicitRequests[bucket] ?? [];
+  const explicitlyRequested = requestedTerms.some((term) => s.includes(term));
+
+  return !explicitlyRequested;
+}
+
+function buildComplianceNotes(context = {}) {
+  const notes = [];
+
+  if (isBackgroundCheckScenario(context)) {
+    notes.push(
+      "General OSINT tools are investigative leads only and are not substitutes for FCRA-compliant consumer reporting agencies.",
+      "Do not use non-FCRA OSINT findings for employment, tenant, credit, insurance, or adverse-action decisions without proper legal/compliance review.",
+      "Use consented, lawful, public-source methods only.",
+      "Corroborate all findings through primary sources before treating them as factual."
+    );
+
+    const purpose = String(context.authorizedPurpose ?? "unknown").toLowerCase();
+
+    if (purpose === "employment" || purpose === "tenant") {
+      notes.push(
+        "Because the authorizedPurpose is employment or tenant screening, use only legally approved, FCRA-compliant processes for any adverse decision."
+      );
+    }
+
+    if (purpose === "unknown") {
+      notes.push(
+        "Authorization purpose is unknown; restrict output to a cautious passive OSINT lead-generation workflow."
+      );
+    }
+  }
+
+  const location = String(context.location ?? "").trim();
+  const targetName = String(context.targetName ?? "").trim();
+  const targetType = String(context.targetType ?? "").toLowerCase();
+  const nameLooksLikeLocation =
+    /,\s*[a-z]{2}\b/i.test(targetName) || /\b[a-z][a-z.\-']+\s+[a-z]{2}\b/i.test(targetName);
+
+  if (targetType === "person" && !location && nameLooksLikeLocation) {
+    notes.push(
+      "Location was not separately provided; if the final words are a city/state, pass them as location for better tool selection."
+    );
+  }
+
+  return notes;
+}
+
 function scenarioBoost(resource, bucket, context) {
   let score = 0;
   const t = textOf(resource);
@@ -478,6 +599,87 @@ function scenarioBoost(resource, bucket, context) {
     }
   }
 
+  if (isBackgroundCheckScenario(context)) {
+    if (bucket === "username") {
+      for (const term of [
+        "username",
+        "profile",
+        "social media",
+        "people search",
+        "account discovery",
+      ]) {
+        if (t.includes(term)) score += 8;
+      }
+    }
+
+    if (bucket === "email") {
+      for (const term of [
+        "reverse email",
+        "email reputation",
+        "email search",
+        "email address",
+        "breach",
+      ]) {
+        if (t.includes(term)) score += 8;
+      }
+    }
+
+    if (bucket === "social") {
+      for (const term of [
+        "social media",
+        "profile",
+        "facebook",
+        "instagram",
+        "linkedin",
+        "account",
+        "content search",
+      ]) {
+        if (t.includes(term)) score += 8;
+      }
+    }
+
+    if (bucket === "public_records") {
+      for (const term of [
+        "public records",
+        "court",
+        "criminal",
+        "property",
+        "people search",
+        "background",
+      ]) {
+        if (t.includes(term)) score += 8;
+      }
+    }
+
+    if (bucket === "geolocation_maps") {
+      for (const term of [
+        "map",
+        "address",
+        "place",
+        "geolocation",
+        "property",
+        "imagery",
+      ]) {
+        if (t.includes(term)) score += 8;
+      }
+    }
+
+    if (bucket === "opsec") {
+      for (const term of [
+        "privacy",
+        "browser",
+        "metadata",
+        "evidence",
+        "capture",
+        "documentation",
+        "vpn",
+        "proxy",
+      ]) {
+        if (t.includes(term)) score += 8;
+      }
+    }
+  }
+
   if (
     s.includes("maritime") ||
     s.includes("marine") ||
@@ -544,10 +746,10 @@ function scoreForBucket(resource, bucket, context = {}) {
     "identify endpoint",
     "account recovery",
   ];
-  if (
-    !s.includes("account recovery") &&
-    recoveryTerms.some((term) => t.includes(term))
-  ) {
+  const hasRecoverySignals = recoveryTerms.some((term) => t.includes(term));
+  if (isBackgroundCheckScenario(context) && !s.includes("account recovery") && hasRecoverySignals) {
+    score -= 20;
+  } else if (!s.includes("account recovery") && hasRecoverySignals) {
     score -= 12;
   }
 
@@ -615,9 +817,11 @@ function selectBest(
 function buildBucketPlan(resources, options = {}) {
   const scenarioContext = {
     targetType: String(options.targetType ?? "general").toLowerCase(),
+    scenarioType: String(options.scenarioType ?? "general").toLowerCase(),
     targetName: String(options.targetName ?? ""),
     location: String(options.location ?? ""),
     scenario: String(options.scenario ?? ""),
+    authorizedPurpose: String(options.authorizedPurpose ?? "unknown").toLowerCase(),
     priorities: Array.isArray(options.priorities)
       ? options.priorities.map(String)
       : [],
@@ -626,10 +830,24 @@ function buildBucketPlan(resources, options = {}) {
   const bucketCoverage = {};
   const finalToolTable = [];
   const selectedUrls = new Set();
+  const complianceNotes = buildComplianceNotes(scenarioContext);
 
   for (const [bucket, predicate] of Object.entries(bucketDefs)) {
     const matches = resources.filter(predicate);
     const limit = bucketLimits[bucket] ?? 1;
+
+    if (shouldSuppressBucketForScenario(bucket, scenarioContext)) {
+      bucketCoverage[bucket] = {
+        label: bucketLabels[bucket],
+        matchCount: matches.length,
+        selectedCount: 0,
+        selectedToolNames: [],
+        suppressed: true,
+        suppressionReason:
+          "Suppressed by default for person/background-check scenario unless explicitly requested.",
+      };
+      continue;
+    }
 
     const selected = selectBest(
       matches,
@@ -664,23 +882,29 @@ function buildBucketPlan(resources, options = {}) {
       finalToolCount: finalToolTable.length,
       transportationCovered:
         bucketCoverage.transportation.matchCount === 0 ||
+        bucketCoverage.transportation.suppressed === true ||
         finalToolTable.some((r) => r.bucket === "transportation"),
       geolocationCovered:
         bucketCoverage.geolocation_maps.matchCount === 0 ||
+        bucketCoverage.geolocation_maps.suppressed === true ||
         finalToolTable.some((r) => r.bucket === "geolocation_maps"),
       militaryCovered:
         bucketCoverage.military.matchCount === 0 ||
+        bucketCoverage.military.suppressed === true ||
         finalToolTable.some((r) => r.bucket === "military"),
       opsecCovered:
         bucketCoverage.opsec.matchCount === 0 ||
+        bucketCoverage.opsec.suppressed === true ||
         finalToolTable.some((r) => r.bucket === "opsec"),
     },
     scoringNotes: [
       "Base scoring favors live, non-deprecated, passive, free/freemium, no-registration tools.",
       "Bucket-specific preferred terms are applied before final selection.",
-      "Scenario terms are used to bias selections when targetType, location, scenario, or priorities are provided.",
+      "Scenario terms are used to bias selections when targetType, scenarioType, location, authorizedPurpose, scenario, or priorities are provided.",
       "Duplicate URLs are avoided across buckets when alternatives are available.",
+      "Background-check scenarios suppress transportation, weather/public-safety, military, and domain/dns buckets unless explicitly requested.",
     ],
+    complianceNotes,
   };
 }
 
@@ -850,7 +1074,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
       {
         name: "build_osint_bucket_plan",
         description:
-          "Build a balanced passive-first OSINT plan, optionally biased by target type, location, scenario, and priorities.",
+          "Build a balanced passive-first OSINT plan, optionally biased by target type, scenario type, location, authorization purpose, scenario text, and priorities.",
         inputSchema: {
           type: "object",
           properties: {
@@ -858,6 +1082,21 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
               type: "string",
               description:
                 "Optional target type, e.g. person, domain, organization, location, vehicle, vessel, aircraft, or general.",
+            },
+            scenarioType: {
+              type: "string",
+              enum: [
+                "background_check",
+                "person_osint",
+                "organization_osint",
+                "domain_investigation",
+                "maritime_awareness",
+                "public_safety",
+                "training",
+                "general",
+              ],
+              description:
+                "Optional scenario classification used for bucket biasing and suppression logic.",
             },
             targetName: {
               type: "string",
@@ -877,6 +1116,19 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
               items: { type: "string" },
               description:
                 "Optional priority tags to emphasize in scoring, e.g. maritime, social, opsec.",
+            },
+            authorizedPurpose: {
+              type: "string",
+              enum: [
+                "self-audit",
+                "consented review",
+                "training",
+                "employment",
+                "tenant",
+                "unknown",
+              ],
+              description:
+                "Optional authorization purpose for compliance-oriented guidance.",
             },
           },
           additionalProperties: false,
