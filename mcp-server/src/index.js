@@ -103,6 +103,18 @@ function textOf(resource) {
     .toLowerCase();
 }
 
+function scenarioText(options = {}) {
+  return [
+    options.targetType,
+    options.targetName,
+    options.location,
+    options.scenario,
+    ...(Array.isArray(options.priorities) ? options.priorities : []),
+  ]
+    .join(" ")
+    .toLowerCase();
+}
+
 const bucketLabels = {
   username: "Username investigation",
   email: "Email discovery / verification",
@@ -324,7 +336,196 @@ function compactTool(resource) {
   };
 }
 
-function scoreForBucket(resource, bucket) {
+function scenarioBoost(resource, bucket, context) {
+  let score = 0;
+  const t = textOf(resource);
+  const s = scenarioText(context);
+
+  if (
+    s.includes("gulf shores") ||
+    s.includes("alabama") ||
+    s.includes("gulf coast") ||
+    s.includes("coastal")
+  ) {
+    if (bucket === "transportation") {
+      for (const term of [
+        "ais",
+        "vessel",
+        "ship",
+        "marine",
+        "maritime",
+        "fishing",
+        "nautical",
+        "coast",
+      ]) {
+        if (t.includes(term)) score += 8;
+      }
+    }
+
+    if (bucket === "weather_public_safety_local") {
+      for (const term of [
+        "weather",
+        "hurricane",
+        "storm",
+        "radar",
+        "noaa",
+        "nws",
+        "warning",
+        "alert",
+        "forecast",
+        "flood",
+        "beach",
+      ]) {
+        if (t.includes(term)) score += 8;
+      }
+    }
+
+    if (bucket === "geolocation_maps") {
+      for (const term of [
+        "map",
+        "imagery",
+        "satellite",
+        "coordinates",
+        "terrain",
+        "earth",
+      ]) {
+        if (t.includes(term)) score += 6;
+      }
+    }
+  }
+
+  if (String(context.targetType).toLowerCase() === "person") {
+    if (bucket === "username") {
+      for (const term of [
+        "username",
+        "profile",
+        "social media",
+        "people search",
+        "account discovery",
+      ]) {
+        if (t.includes(term)) score += 8;
+      }
+    }
+
+    if (bucket === "email") {
+      for (const term of [
+        "reverse email",
+        "email reputation",
+        "email search",
+        "email address",
+        "breach",
+      ]) {
+        if (t.includes(term)) score += 8;
+      }
+    }
+
+    if (bucket === "public_records") {
+      for (const term of [
+        "public records",
+        "court",
+        "criminal",
+        "property",
+        "people search",
+        "background",
+      ]) {
+        if (t.includes(term)) score += 8;
+      }
+    }
+
+    if (bucket === "social") {
+      for (const term of [
+        "social media",
+        "profile",
+        "facebook",
+        "instagram",
+        "linkedin",
+        "account",
+      ]) {
+        if (t.includes(term)) score += 8;
+      }
+    }
+  }
+
+  if (
+    String(context.targetType).toLowerCase() === "domain" ||
+    String(context.targetType).toLowerCase() === "organization"
+  ) {
+    if (bucket === "domain_dns") {
+      for (const term of [
+        "whois",
+        "dns",
+        "subdomain",
+        "passive dns",
+        "rdap",
+        "domain intelligence",
+        "infrastructure",
+      ]) {
+        if (t.includes(term)) score += 8;
+      }
+    }
+
+    if (bucket === "public_records") {
+      for (const term of [
+        "business",
+        "company",
+        "annual report",
+        "corporate",
+        "sec",
+        "registration",
+      ]) {
+        if (t.includes(term)) score += 8;
+      }
+    }
+  }
+
+  if (
+    s.includes("maritime") ||
+    s.includes("marine") ||
+    s.includes("vessel") ||
+    s.includes("ship") ||
+    s.includes("ais")
+  ) {
+    if (bucket === "transportation" || bucket === "weather_public_safety_local") {
+      for (const term of [
+        "ais",
+        "marine",
+        "maritime",
+        "vessel",
+        "ship",
+        "coast",
+        "nautical",
+      ]) {
+        if (t.includes(term)) score += 8;
+      }
+    }
+  }
+
+  if (
+    s.includes("person") ||
+    s.includes("people") ||
+    s.includes("social") ||
+    s.includes("username")
+  ) {
+    if (
+      bucket === "username" ||
+      bucket === "email" ||
+      bucket === "public_records" ||
+      bucket === "social"
+    ) {
+      score += 10;
+    }
+  }
+
+  if (s.includes("opsec") || s.includes("privacy")) {
+    if (bucket === "opsec") {
+      score += 12;
+    }
+  }
+
+  return score;
+}
+
+function scoreForBucket(resource, bucket, context = {}) {
   let score = scoreTool(resource);
   const terms = bucketPreferredTerms[bucket] ?? [];
   const t = textOf(resource);
@@ -333,21 +534,95 @@ function scoreForBucket(resource, bucket) {
     if (t.includes(term)) score += 6;
   }
 
+  score += scenarioBoost(resource, bucket, context);
+
+  const s = scenarioText(context);
+  const recoveryTerms = [
+    "recovery",
+    "password reset",
+    "login",
+    "identify endpoint",
+    "account recovery",
+  ];
+  if (
+    !s.includes("account recovery") &&
+    recoveryTerms.some((term) => t.includes(term))
+  ) {
+    score -= 12;
+  }
+
+  if (bucket === "opsec") {
+    const darkNetworkTerms = ["i2p", "darknet", "onion", "hidden service"];
+    if (
+      !s.includes("i2p") &&
+      !s.includes("dark web") &&
+      darkNetworkTerms.some((term) => t.includes(term))
+    ) {
+      score -= 8;
+    }
+
+    const practicalOpsecTerms = [
+      "browser",
+      "metadata",
+      "privacy",
+      "vpn",
+      "proxy",
+      "tor browser",
+      "evidence",
+      "capture",
+    ];
+    for (const term of practicalOpsecTerms) {
+      if (t.includes(term)) score += 5;
+    }
+  }
+
   return score;
 }
 
-function selectBest(matches, limit, bucket) {
-  return [...matches]
+function selectBest(
+  matches,
+  limit,
+  bucket,
+  context = {},
+  selectedUrls = new Set()
+) {
+  const ranked = [...matches]
     .sort((a, b) => {
-      const scoreDiff = scoreForBucket(b, bucket) - scoreForBucket(a, bucket);
+      const scoreDiff =
+        scoreForBucket(b, bucket, context) - scoreForBucket(a, bucket, context);
       if (scoreDiff !== 0) return scoreDiff;
       return String(a.name).localeCompare(String(b.name));
     })
-    .slice(0, limit)
-    .map(compactTool);
+    .map((resource) => ({
+      resource,
+      normalizedUrl: normalizeText(resource.url),
+    }));
+
+  const unused = ranked.filter(
+    ({ normalizedUrl }) => !normalizedUrl || !selectedUrls.has(normalizedUrl)
+  );
+  const reuse = ranked.filter(
+    ({ normalizedUrl }) => normalizedUrl && selectedUrls.has(normalizedUrl)
+  );
+  const selected =
+    unused.length >= limit
+      ? unused.slice(0, limit)
+      : [...unused, ...reuse].slice(0, limit);
+
+  return selected.map(({ resource }) => compactTool(resource));
 }
 
-function buildBucketPlan(resources) {
+function buildBucketPlan(resources, options = {}) {
+  const scenarioContext = {
+    targetType: String(options.targetType ?? "general").toLowerCase(),
+    targetName: String(options.targetName ?? ""),
+    location: String(options.location ?? ""),
+    scenario: String(options.scenario ?? ""),
+    priorities: Array.isArray(options.priorities)
+      ? options.priorities.map(String)
+      : [],
+  };
+
   const bucketCoverage = {};
   const finalToolTable = [];
   const selectedUrls = new Set();
@@ -356,24 +631,13 @@ function buildBucketPlan(resources) {
     const matches = resources.filter(predicate);
     const limit = bucketLimits[bucket] ?? 1;
 
-    const unselectedMatches = matches.filter((resource) => {
-      const url = normalizeText(resource.url);
-      return !url || !selectedUrls.has(url);
-    });
-
-    let selected = selectBest(unselectedMatches, limit, bucket);
-
-    if (selected.length < limit) {
-      const fallback = selectBest(matches, limit, bucket);
-      const alreadyChosen = new Set(selected.map((tool) => normalizeText(tool.url)));
-      for (const tool of fallback) {
-        if (selected.length >= limit) break;
-        const toolUrl = normalizeText(tool.url);
-        if (alreadyChosen.has(toolUrl)) continue;
-        selected.push(tool);
-        alreadyChosen.add(toolUrl);
-      }
-    }
+    const selected = selectBest(
+      matches,
+      limit,
+      bucket,
+      scenarioContext,
+      selectedUrls
+    );
 
     bucketCoverage[bucket] = {
       label: bucketLabels[bucket],
@@ -383,8 +647,7 @@ function buildBucketPlan(resources) {
     };
 
     for (const r of selected) {
-      const url = normalizeText(r.url);
-      if (url) selectedUrls.add(url);
+      if (r.url) selectedUrls.add(normalizeText(r.url));
       finalToolTable.push({
         bucket,
         bucketLabel: bucketLabels[bucket],
@@ -394,6 +657,7 @@ function buildBucketPlan(resources) {
   }
 
   return {
+    scenarioContext,
     bucketCoverage,
     finalToolTable,
     validationChecks: {
@@ -411,6 +675,12 @@ function buildBucketPlan(resources) {
         bucketCoverage.opsec.matchCount === 0 ||
         finalToolTable.some((r) => r.bucket === "opsec"),
     },
+    scoringNotes: [
+      "Base scoring favors live, non-deprecated, passive, free/freemium, no-registration tools.",
+      "Bucket-specific preferred terms are applied before final selection.",
+      "Scenario terms are used to bias selections when targetType, location, scenario, or priorities are provided.",
+      "Duplicate URLs are avoided across buckets when alternatives are available.",
+    ],
   };
 }
 
@@ -580,10 +850,35 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
       {
         name: "build_osint_bucket_plan",
         description:
-          "Build a balanced passive-first OSINT plan using category buckets for username, email, domain, social, records, transportation, geolocation, weather/public safety/local, military, and OPSEC.",
+          "Build a balanced passive-first OSINT plan, optionally biased by target type, location, scenario, and priorities.",
         inputSchema: {
           type: "object",
-          properties: {},
+          properties: {
+            targetType: {
+              type: "string",
+              description:
+                "Optional target type, e.g. person, domain, organization, location, vehicle, vessel, aircraft, or general.",
+            },
+            targetName: {
+              type: "string",
+              description: "Optional target name or primary subject label.",
+            },
+            location: {
+              type: "string",
+              description: "Optional location context used to bias local tooling.",
+            },
+            scenario: {
+              type: "string",
+              description:
+                "Optional scenario narrative used to bias tool selections.",
+            },
+            priorities: {
+              type: "array",
+              items: { type: "string" },
+              description:
+                "Optional priority tags to emphasize in scoring, e.g. maritime, social, opsec.",
+            },
+          },
           additionalProperties: false,
         },
       },
@@ -634,7 +929,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 
     case "build_osint_bucket_plan": {
       const rootValidation = getRootValidation(root, resources);
-      const plan = buildBucketPlan(resources);
+      const plan = buildBucketPlan(resources, args);
 
       return asJsonContent({
         rootValidation,
